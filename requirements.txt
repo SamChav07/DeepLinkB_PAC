@@ -6,4 +6,8 @@ aiofiles
 # dependencias de procesamiento de datos
 pdfplumber
 python-docx
-
+# dependencias de sheet API
+gspread
+google-auth
+# dependencias de automatizacion de busqueda web
+playwright
