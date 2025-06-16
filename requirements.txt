@@ -1,0 +1,9 @@
+# dependencias api
+fastapi
+uvicorn
+python-multipart
+aiofiles
+# dependencias de procesamiento de datos
+pdfplumber
+python-docx
+
