@@ -13,7 +13,7 @@ def procesar_todo():
     scraper = BibliotecaScraper()
     scraper.iniciar_sesion()
 
-    worksheet = conectar_hoja("BiblioPDFs 📚")
+    worksheet = conectar_hoja()
     resultados = []
 
     for archivo in archivos:

@@ -1,54 +1,71 @@
-from playwright.sync_api import sync_playwright
 from backend.config import Config
+from playwright.sync_api import sync_playwright, TimeoutError
 
 class BibliotecaScraper:
     def __init__(self):
         self.playwright = sync_playwright().start()
-        self.browser = self.playwright.chromium.launch(headless=True)
-        self.page = self.browser.new_page()
-    
+        self.browser = self.playwright.chromium.launch(headless=False)
+        self.context = self.browser.new_context()
+        self.page = self.context.new_page()
+
     def iniciar_sesion(self):
         self.page.goto(Config.URL_BIBLIOTECA)
-        self.page.fill('input[name="user"]', Config.USUARIO)
-        self.page.fill('input[name="pwd"]', Config.PASSWORD)
-        self.page.click('.entrar')
-        self.page.wait_for_timeout(2000)
+        self.page.wait_for_selector("//input[@id='user']", timeout=10000)
+        self.page.locator("//input[@id='user']").fill(Config.USUARIO)
+        self.page.locator("//input[@id='pwd']").fill(Config.PASSWORD)
+        self.page.locator("//form[@id='login']/div/div/div[2]/div[3]/div[2]/a/span/strong").click()
+        self.page.wait_for_load_state("networkidle")
 
-    def buscar_libro(self, referencia: str, categoria: str = "General") -> dict:
+    def buscar_libro(self, referencia, categoria):
         catalogos = Config.CATEGORIA_OPCIONES_WEB.get(categoria, Config.CATEGORIA_OPCIONES_WEB["General"])
 
-        for nombre, xpath in catalogos.items():
+        for nombre_catalogo, xpath_icono in catalogos.items():
             try:
-                with self.page.expect_popup() as popup_info:
-                    self.page.click(f"xpath={xpath}")
-                popup = popup_info.value
-                popup.wait_for_load_state()
-                popup.wait_for_timeout(3000)
+                self.page.locator(xpath_icono).click()
+                self.context.wait_for_event("page")  # Esperar la nueva pestaña
+                popup = self.context.pages[-1]
+                popup.wait_for_load_state("load", timeout=10000)
+            except Exception as e:
+                continue
 
-                try:
-                    popup.fill('input[name="search"]', referencia)
-                    popup.press('input[name="search"]', "Enter")
-                    popup.wait_for_timeout(3000)
+            config_formulario = Config.CATALOGOS_FORMULARIOS.get(nombre_catalogo)
+            if not config_formulario:
+                continue
 
-                    if "result" in popup.content():  # <-- AJUSTAR esto según resultado real
-                        return {
-                            "encontrado": True,
-                            "fuente": nombre,
-                            "url": popup.url
-                        }
+            try:
+                if "button_for_search_xpath" in config_formulario:
+                    popup.locator(config_formulario["button_for_search_xpath"]).click()
 
-                except:
-                    pass
-                popup.close()
-            except:
+                popup.locator(config_formulario["search_input_xpath"]).fill(referencia)
+
+                if config_formulario["submit_action"] == "enter":
+                    popup.locator(config_formulario["search_input_xpath"]).press("Enter")
+                elif config_formulario["submit_action"] == "click":
+                    popup.locator(config_formulario["submit_xpath"]).click()
+
+                popup.wait_for_timeout(5000)  # Dar tiempo a resultados
+
+                # Validar si se encontraron resultados
+                encontrado = False
+                if "result_xpath" in config_formulario:
+                    encontrado = popup.locator(config_formulario["result_xpath"]).count() > 0
+
+                return {
+                    "encontrado": encontrado,
+                    "fuente": nombre_catalogo,
+                    "url": popup.url
+                }
+
+            except Exception as e:
                 continue
 
         return {
             "encontrado": False,
-            "fuente": None,
-            "url": None
+            "fuente": "",
+            "url": ""
         }
 
     def cerrar(self):
+        self.context.close()
         self.browser.close()
         self.playwright.stop()

@@ -39,7 +39,7 @@ def analizar_todos():
                 ref
             ])
 
-    worksheet = conectar_hoja("DeepLinkB_PAC")
+    worksheet = conectar_hoja()
     agregar_filas(worksheet, filas)
 
     return resultados
