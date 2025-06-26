@@ -13,3 +13,8 @@ uvicorn backend.main:app --reload
 
 * **Python:** The core language for development.
 * **FastAPI:** For building a high-performance API.
+* **unittest:** For Unitary tests.
+
+```bash
+python -m unittest backend/tests/test_scraper.py
+```
