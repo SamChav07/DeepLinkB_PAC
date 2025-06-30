@@ -17,6 +17,7 @@ Thumbs.db
 # Archivos cargados / generados
 backend/uploaded_files/
 google-credentials.json
+notas.txt
 
 # Archivos exportados
 *.xlsx
