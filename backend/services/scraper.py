@@ -1,71 +1,78 @@
 from backend.config import Config
-from playwright.sync_api import sync_playwright, TimeoutError
+from playwright.async_api import async_playwright, TimeoutError
+import os
+from backend.services.processor import procesar_archivo
+from backend.services.sheets import conectar_hoja, agregar_filas
+from fastapi import APIRouter
+
+router = APIRouter()
 
 class BibliotecaScraper:
-    def __init__(self):
-        self.playwright = sync_playwright().start()
-        self.browser = self.playwright.chromium.launch(headless=False)
-        self.context = self.browser.new_context()
-        self.page = self.context.new_page()
+    async def iniciar(self):
+        self.playwright = await async_playwright().start()
+        self.browser = await self.playwright.chromium.launch(headless=True)
+        self.context = await self.browser.new_context()
+        self.page = await self.context.new_page()
 
-    def iniciar_sesion(self):
-        self.page.goto(Config.URL_BIBLIOTECA)
-        self.page.wait_for_selector("//input[@id='user']", timeout=10000)
-        self.page.locator("//input[@id='user']").fill(Config.USUARIO)
-        self.page.locator("//input[@id='pwd']").fill(Config.PASSWORD)
-        self.page.locator("//form[@id='login']/div/div/div[2]/div[3]/div[2]/a/span/strong").click()
-        self.page.wait_for_load_state("networkidle")
+    async def iniciar_sesion(self):
+        await self.page.goto(Config.URL_BIBLIOTECA)
+        await self.page.wait_for_selector("//input[@id='user']", timeout=10000)
+        await self.page.locator("//input[@id='user']").fill(Config.USUARIO)
+        await self.page.locator("//input[@id='pwd']").fill(Config.PASSWORD)
+        await self.page.locator("//form[@id='login']/div/div/div[2]/div[3]/div[2]/a/span/strong").click()
+        await self.page.wait_for_load_state("networkidle")
 
-    def buscar_libro(self, referencia, categoria):
+    async def buscar_libro(self, referencia, categoria):
         catalogos = Config.CATEGORIA_OPCIONES_WEB.get(categoria, Config.CATEGORIA_OPCIONES_WEB["General"])
 
         for nombre_catalogo, xpath_icono in catalogos.items():
             try:
-                self.page.locator(xpath_icono).click()
-                self.context.wait_for_event("page")  # Esperar la nueva pestaña
-                popup = self.context.pages[-1]
-                popup.wait_for_load_state("load", timeout=10000)
-            except Exception as e:
-                continue
+                await self.page.locator(xpath_icono).click()
+                popup = await self.context.wait_for_event("page")
+                await popup.wait_for_load_state("load", timeout=10000)
 
-            config_formulario = Config.CATALOGOS_FORMULARIOS.get(nombre_catalogo)
-            if not config_formulario:
-                continue
+                config_formulario = Config.CATALOGOS_FORMULARIOS.get(nombre_catalogo)
+                if not config_formulario:
+                    await popup.close()
+                    continue
 
-            try:
+                # Si requiere presionar un botón antes de buscar
                 if "button_for_search_xpath" in config_formulario:
-                    popup.locator(config_formulario["button_for_search_xpath"]).click()
+                    await popup.locator(config_formulario["button_for_search_xpath"]).click()
 
-                popup.locator(config_formulario["search_input_xpath"]).fill(referencia)
+                await popup.locator(config_formulario["search_input_xpath"]).fill(referencia)
 
                 if config_formulario["submit_action"] == "enter":
-                    popup.locator(config_formulario["search_input_xpath"]).press("Enter")
+                    await popup.locator(config_formulario["search_input_xpath"]).press("Enter")
                 elif config_formulario["submit_action"] == "click":
-                    popup.locator(config_formulario["submit_xpath"]).click()
+                    await popup.locator(config_formulario["submit_xpath"]).click()
 
-                popup.wait_for_timeout(5000)  # Dar tiempo a resultados
+                await popup.wait_for_timeout(5000)
 
-                # Validar si se encontraron resultados
                 encontrado = False
                 if "result_xpath" in config_formulario:
-                    encontrado = popup.locator(config_formulario["result_xpath"]).count() > 0
+                    encontrado = await popup.locator(config_formulario["result_xpath"]).count() > 0
 
-                return {
-                    "encontrado": encontrado,
-                    "fuente": nombre_catalogo,
-                    "url": popup.url
-                }
+                if encontrado:
+                    return {
+                        "encontrado": True,
+                        "fuente": nombre_catalogo,
+                        "url": popup.url
+                    }
 
-            except Exception as e:
+                await popup.close()
+
+            except Exception:
                 continue
 
+        # Si ninguna fuente encontró
         return {
             "encontrado": False,
             "fuente": "",
             "url": ""
         }
 
-    def cerrar(self):
-        self.context.close()
-        self.browser.close()
-        self.playwright.stop()
+    async def cerrar(self):
+        await self.context.close()
+        await self.browser.close()
+        await self.playwright.stop()
