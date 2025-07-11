@@ -6,15 +6,6 @@ from backend.config import Config
 
 router = APIRouter()
 
-@router.get("/analizar/")
-def analizar_archivo(nombre: str = Query(..., description="Nombre del archivo subido")):
-    path = os.path.join(Config.UPLOAD_DIR, nombre)
-    if not os.path.exists(path):
-        return {"error": "Archivo no encontrado"}
-
-    resultado = procesar_archivo(path)
-    return resultado
-
 @router.get("/analizar-todos/")
 def analizar_todos():
     archivos = [
